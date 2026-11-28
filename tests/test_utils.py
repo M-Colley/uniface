@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from uniface import compute_similarity, face_alignment
+from uniface.common import letterbox_resize, resize_image
 from uniface.face_utils import estimate_norm
 
 
@@ -267,3 +268,17 @@ def test_face_alignment_rejects_six_points(mock_image):
     """The rejection should propagate through face_alignment, the public entry point."""
     with pytest.raises(ValueError, match='requires 5 alignment landmarks'):
         face_alignment(mock_image, np.zeros((6, 2), dtype=np.float32))
+
+
+@pytest.mark.parametrize('shape', [(1, 1000, 3), (1000, 1, 3)])
+def test_resize_helpers_handle_extreme_aspect_ratios(shape):
+    """A side that would round down to 0 pixels is kept at 1 pixel instead of crashing cv2.resize."""
+    thin = np.zeros(shape, dtype=np.uint8)
+
+    canvas, factor = resize_image(thin, target_shape=(640, 640))
+    assert canvas.shape == (640, 640, 3)
+    assert factor > 0
+
+    blob, scale, _ = letterbox_resize(thin, target_size=640)
+    assert blob.shape == (1, 3, 640, 640)
+    assert scale > 0

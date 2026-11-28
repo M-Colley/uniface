@@ -4,8 +4,10 @@
 
 from __future__ import annotations
 
+import math
 from typing import Literal
 
+import cv2
 import numpy as np
 
 from uniface.common import distance2bbox, distance2kps, non_max_suppression, resize_image
@@ -32,8 +34,8 @@ class SCRFD(BaseDetector):
             Specifies the SCRFD variant to load. Defaults to SCRFD_10G_KPS.
         confidence_threshold (float): Confidence threshold for filtering detections. Defaults to 0.5.
         nms_threshold (float): Non-Maximum Suppression threshold. Defaults to 0.4.
-        input_size (tuple[int, int]): Input image size (width, height).
-            Defaults to (640, 640).
+        input_size (tuple[int, int]): Input image size (width, height). Both values must be
+            multiples of 8. Defaults to (640, 640).
             Note: Non-default sizes may cause slower inference and CoreML compatibility issues.
         providers (list[str] | None): ONNX Runtime execution providers. If None, auto-detects
             the best available provider. Example: ['CPUExecutionProvider'] to force CPU.
@@ -50,7 +52,7 @@ class SCRFD(BaseDetector):
         _model_path (str): Absolute path to the downloaded/verified model weights.
 
     Raises:
-        ValueError: If the model weights are invalid or not found.
+        ValueError: If the model weights are invalid or not found, or `input_size` is not a multiple of 8.
         RuntimeError: If the ONNX model fails to load or initialize.
     """
 
@@ -73,6 +75,9 @@ class SCRFD(BaseDetector):
             input_size=input_size,
             providers=providers,
         )
+
+        if input_size[0] <= 0 or input_size[1] <= 0 or input_size[0] % 8 != 0 or input_size[1] % 8 != 0:
+            raise ValueError(f'input_size dimensions must be positive multiples of 8, got {input_size}')
 
         self.model_name = model_name
         self.confidence_threshold = confidence_threshold
@@ -118,18 +123,21 @@ class SCRFD(BaseDetector):
     def preprocess(self, image: np.ndarray) -> np.ndarray:
         """Preprocess image for inference.
 
+        Converts BGR input to RGB and normalizes with mean 127.5 and std 128.0.
+
         Args:
-            image: Input image with shape (H, W, C).
+            image: Input image with shape (H, W, C) in BGR format.
 
         Returns:
             Preprocessed image tensor with shape (1, C, H, W).
         """
-        image = image.astype(np.float32)
-        image = (image - 127.5) / 127.5
-        image = image.transpose(2, 0, 1)  # HWC to CHW
-        image = np.expand_dims(image, axis=0)
-
-        return image
+        return cv2.dnn.blobFromImage(
+            image,
+            scalefactor=1.0 / 128.0,
+            size=(image.shape[1], image.shape[0]),
+            mean=(127.5, 127.5, 127.5),
+            swapRB=True,
+        )
 
     def inference(self, input_tensor: np.ndarray) -> list[np.ndarray]:
         """Perform model inference on the preprocessed image tensor.
@@ -167,8 +175,8 @@ class SCRFD(BaseDetector):
             kps_preds = outputs[2 * num_feature_maps + idx] * stride
 
             # Generate anchors
-            fm_height = image_size[0] // stride
-            fm_width = image_size[1] // stride
+            fm_height = math.ceil(image_size[0] / stride)
+            fm_width = math.ceil(image_size[1] / stride)
             cache_key = (fm_height, fm_width, stride)
 
             if cache_key in self._center_cache:

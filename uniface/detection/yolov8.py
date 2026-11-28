@@ -228,7 +228,8 @@ class YOLOv8Face(BaseDetector):
             landmarks = np.stack([kpt_x, kpt_y], axis=-1).reshape(-1, 10)
 
             # Apply sigmoid to class confidence
-            scores = 1 / (1 + np.exp(-cls_conf))
+            with np.errstate(over='ignore'):
+                scores = 1 / (1 + np.exp(-cls_conf))
 
             boxes_list.append(boxes)
             scores_list.append(scores)
@@ -282,10 +283,10 @@ class YOLOv8Face(BaseDetector):
         landmarks[:, 1::2] = (landmarks[:, 1::2] - pad_h) / scale  # y coordinates
 
         # Reshape landmarks to (N, 5, 2)
-        landmarks = landmarks.reshape(-1, 5, 2)
+        landmarks = landmarks.reshape(-1, 5, 2).astype(np.float32)
 
         # Combine results
-        detections = np.concatenate([boxes, scores[:, None]], axis=1)
+        detections = np.concatenate([boxes, scores[:, None]], axis=1).astype(np.float32)
 
         return detections, landmarks
 
