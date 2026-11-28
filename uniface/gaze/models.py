@@ -75,8 +75,6 @@ class MobileGaze(BaseGazeEstimator):
 
         self.input_mean = [0.485, 0.456, 0.406]
         self.input_std = [0.229, 0.224, 0.225]
-        self._mean = np.array(self.input_mean, dtype=np.float32)
-        self._std = np.array(self.input_std, dtype=np.float32)
         self.providers = providers
 
         # Model specific parameters for bin-based classification (Gaze360 config)
@@ -125,17 +123,23 @@ class MobileGaze(BaseGazeEstimator):
         Returns:
             np.ndarray: Preprocessed image tensor with shape (1, 3, H, W).
         """
-        # Resize before BGR->RGB conversion to avoid processing full-resolution crops
-        image = cv2.resize(face_image, self.input_size)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        # Convert BGR to RGB
+        image = cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB)
 
-        # Normalize to [0, 1] and apply ImageNet normalization
+        # Resize to model input size
+        image = cv2.resize(image, self.input_size)
+
+        # Normalize to [0, 1] and apply normalization
         image = image.astype(np.float32) / 255.0
-        image = (image - self._mean) / self._std
+        mean = np.array(self.input_mean, dtype=np.float32)
+        std = np.array(self.input_std, dtype=np.float32)
+        image = (image - mean) / std
 
-        # HWC -> CHW -> contiguous NCHW
+        # HWC -> CHW -> NCHW
         image = np.transpose(image, (2, 0, 1))
-        return np.ascontiguousarray(image[np.newaxis], dtype=np.float32)
+        image = np.expand_dims(image, axis=0).astype(np.float32)
+
+        return image
 
     def postprocess(self, outputs: tuple[np.ndarray, np.ndarray]) -> GazeResult:
         """Postprocess raw model outputs into gaze angles.

@@ -111,15 +111,16 @@ class HeadPose(BaseHeadPoseEstimator):
         Returns:
             np.ndarray: Preprocessed image tensor with shape (1, 3, H, W).
         """
-        # Resize before BGR->RGB conversion to avoid processing full-resolution crops
-        image = cv2.resize(face_image, self.input_size)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB)
+        image = cv2.resize(image, self.input_size)
         image = image.astype(np.float32) / 255.0
         image = (image - self.input_mean) / self.input_std
 
-        # HWC -> CHW -> contiguous NCHW
+        # HWC -> CHW -> NCHW
         image = np.transpose(image, (2, 0, 1))
-        return np.ascontiguousarray(image[np.newaxis], dtype=np.float32)
+        image = np.expand_dims(image, axis=0).astype(np.float32)
+
+        return image
 
     @staticmethod
     def rotation_matrix_to_euler(rotation_matrix: np.ndarray) -> np.ndarray:
