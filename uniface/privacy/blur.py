@@ -46,7 +46,7 @@ class EllipticalBlur:
     """Elliptical blur with soft, feathered edges.
 
     This blur applies Gaussian blur within an elliptical mask that follows
-    the natural oval shape of faces, requiring full image context for proper blending.
+    the natural oval shape of faces, using the image around each face for proper blending.
 
     Args:
         blur_strength (float): Blur intensity multiplier. Defaults to 3.0.
@@ -67,22 +67,37 @@ class EllipticalBlur:
             image = image.copy()
 
         h, w = image.shape[:2]
+        feather = 25  # radius of the (51, 51) blur that softens the mask edge
 
         for bbox in bboxes:
             x1, y1, x2, y2 = map(int, bbox)
             center_x, center_y = (x1 + x2) // 2, (y1 + y2) // 2
             axes_x = (x2 - x1) // 2 + self.margin
             axes_y = (y2 - y1) // 2 + self.margin
+            kernel_size = max(3, int((min(axes_y, axes_x) * 2 / 7) * self.blur_strength)) | 1
+
+            # Only the ellipse and its feathered edge can change, so work on that region alone
+            rx1, ry1 = max(0, center_x - abs(axes_x) - feather), max(0, center_y - abs(axes_y) - feather)
+            rx2, ry2 = min(w, center_x + abs(axes_x) + feather + 1), min(h, center_y + abs(axes_y) + feather + 1)
+            if rx2 <= rx1 or ry2 <= ry1:
+                continue
 
             # Create soft elliptical mask
-            mask = np.zeros((h, w), dtype=np.float32)
-            cv2.ellipse(mask, (center_x, center_y), (axes_x, axes_y), 0, 0, 360, 255, -1)
+            mx1, my1 = max(0, rx1 - feather), max(0, ry1 - feather)
+            mx2, my2 = min(w, rx2 + feather), min(h, ry2 + feather)
+            mask = np.zeros((my2 - my1, mx2 - mx1), dtype=np.float32)
+            cv2.ellipse(mask, (center_x - mx1, center_y - my1), (axes_x, axes_y), 0, 0, 360, 255, -1)
             mask = cv2.GaussianBlur(mask, (51, 51), 0) / 255.0
-            mask = mask[:, :, np.newaxis]
+            mask = mask[ry1 - my1 : ry2 - my1, rx1 - mx1 : rx2 - mx1, np.newaxis]
 
-            kernel_size = max(3, int((min(axes_y, axes_x) * 2 / 7) * self.blur_strength)) | 1
-            blurred = cv2.GaussianBlur(image, (kernel_size, kernel_size), 0)
-            image[:] = (blurred * mask + image * (1 - mask)).astype(np.uint8)
+            pad = kernel_size // 2
+            bx1, by1 = max(0, rx1 - pad), max(0, ry1 - pad)
+            bx2, by2 = min(w, rx2 + pad), min(h, ry2 + pad)
+            blurred = cv2.GaussianBlur(image[by1:by2, bx1:bx2], (kernel_size, kernel_size), 0)
+            blurred = blurred[ry1 - by1 : ry2 - by1, rx1 - bx1 : rx2 - bx1]
+
+            region = image[ry1:ry2, rx1:rx2]
+            image[ry1:ry2, rx1:rx2] = (blurred * mask + region * (1 - mask)).astype(np.uint8)
 
         return image
 
