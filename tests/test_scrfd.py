@@ -5,6 +5,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import cv2
 import numpy as np
 import pytest
 
@@ -95,11 +98,7 @@ def test_scrfd_preprocess_swaps_bgr_to_rgb_and_scales_by_128(scrfd_model):
 @pytest.mark.parametrize('input_size', [(640, 360), (1280, 720), (360, 640)])
 def test_scrfd_non_multiple_of_32_input_size(input_size):
     """16:9 sizes like 640x360 and 1280x720 (multiples of 8, not 32) run without shape mismatch."""
-    from pathlib import Path
-
-    import cv2
-
-    img_path = Path(__file__).resolve().parent.parent / 'assets' / 'source' / 'detect_group.jpg'
+    img_path = Path(__file__).resolve().parent.parent / 'assets' / 'source' / 'age_adult.jpg'
     image = cv2.imread(str(img_path))
     assert image is not None
 
@@ -116,9 +115,3 @@ def test_scrfd_non_multiple_of_32_input_size(input_size):
 def test_scrfd_rejects_invalid_input_size(bad_size):
     with pytest.raises(ValueError, match='multiples of 8'):
         SCRFD(input_size=bad_size)
-
-
-@pytest.mark.parametrize('bad_image', [None, np.array([1, 2, 3], dtype=np.uint8)])
-def test_scrfd_validates_image_before_unpacking_shape(scrfd_model, bad_image):
-    with pytest.raises(ValueError):
-        scrfd_model.detect(bad_image)

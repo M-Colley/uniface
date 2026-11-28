@@ -79,12 +79,11 @@ def resize_image(
     if im_ratio > model_ratio:
         new_height = height
         new_width = max(1, int(new_height / im_ratio))
-        resize_factor = float(new_height) / frame.shape[0]
     else:
         new_width = width
         new_height = max(1, int(new_width * im_ratio))
-        resize_factor = float(new_width) / frame.shape[1]
 
+    resize_factor = float(new_height) / frame.shape[0]
     resized_frame = cv2.resize(frame, (new_width, new_height))
 
     # Create blank image and place resized image on it
